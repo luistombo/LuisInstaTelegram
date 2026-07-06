@@ -1,0 +1,12 @@
+{
+  "name": "luistombo/luis-insta-telegram",
+  "description": "Telegram webhook bot in PHP for Instagram links.",
+  "type": "project",
+  "license": "MIT",
+  "require": {
+    "php": ">=8.0"
+  },
+  "scripts": {
+    "lint": "php -l public/index.php"
+  }
+}
