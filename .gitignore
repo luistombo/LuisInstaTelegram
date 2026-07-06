@@ -1,19 +1,20 @@
-# Local configuration / secrets
+# Local secrets
 config.txt
 .env
 *.local
 
-# Runtime files
+# Runtime data
 storage/*.log
-storage/*.json
+storage/*.txt
 bot_log.txt
+instagram_cookies.txt
 *.log
 
-# Composer/vendor output
+# Composer/vendor
 vendor/
 composer.lock
 
-# OS/editor files
+# OS/editor
 .DS_Store
 Thumbs.db
 .vscode/

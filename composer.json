@@ -1,12 +1,14 @@
 {
   "name": "luistombo/luis-insta-telegram",
-  "description": "Telegram webhook bot in PHP for Instagram links.",
+  "description": "Telegram webhook bot in PHP that downloads public Instagram post media through RapidAPI and sends photos/videos back to Telegram.",
   "type": "project",
   "license": "MIT",
   "require": {
-    "php": ">=8.0"
+    "php": ">=8.0",
+    "ext-curl": "*",
+    "ext-json": "*"
   },
   "scripts": {
-    "lint": "php -l public/index.php"
+    "lint": "php -l public/peuigbot.php"
   }
 }

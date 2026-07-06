@@ -1,89 +1,65 @@
 # LuisInstaTelegram 1.0.0
 
-Bot de Telegram escrito en PHP para recibir enlaces públicos de Instagram, detectar el shortcode del Reel/Post/TV y responder por Telegram. Está pensado para correr como webhook en un servidor Linux propio con Apache o Nginx y HTTPS.
+Bot de Telegram en PHP para recibir enlaces públicos de Instagram, resolver los medios mediante RapidAPI `instagram-looter2` y devolver por Telegram las fotos y/o videos del post.
 
-> Esta versión inicial no incluye tokens, cookies, claves de API ni datos personales. Toda la configuración sensible vive fuera de Git, en `config.txt`.
+Esta versión está basada en el archivo productivo `peuigbot.php` que ya estaba funcionando en el servidor. Se saneó para publicar en GitHub sin tokens, API keys, cookies ni logs reales.
 
 ---
 
 ## Qué hace
 
-- Recibe mensajes de Telegram mediante webhook.
-- Acepta enlaces de Instagram de tipo:
-  - `https://www.instagram.com/reel/...`
+- Recibe mensajes de Telegram por webhook.
+- Detecta enlaces de Instagram:
   - `https://www.instagram.com/p/...`
+  - `https://www.instagram.com/reel/...`
+  - `https://www.instagram.com/reels/...`
   - `https://www.instagram.com/tv/...`
-- Extrae el shortcode del contenido.
-- Responde al chat de Telegram con el shortcode detectado.
-- Tiene comandos básicos:
+  - `https://instagr.am/p/...`
+- Extrae el shortcode del post.
+- Consulta RapidAPI usando `instagram-looter2.p.rapidapi.com`.
+- Interpreta respuestas tipo `GraphImage`, `GraphVideo` y `GraphSidecar`.
+- Envía fotos con `sendPhoto`.
+- Envía videos con `sendVideo`.
+- Soporta carruseles de imágenes/videos.
+- Responde comandos:
   - `/start`
-  - `/help`
   - `/id`
   - `/version`
-- Permite restringir qué chats pueden usarlo.
-- Permite validar el header secreto de webhook de Telegram.
-- Deja logs locales en `storage/bot.log`.
-- Queda preparado para conectar una API externa de descarga/procesamiento de Instagram.
+- Registra logs locales en `storage/bot_log.txt`.
+- Evita registrar tokens y API keys en logs.
 
 ---
 
-## Qué NO hace todavía
+## Qué necesitás
 
-- No descarga videos/fotos de Instagram por sí solo.
-- No hace scraping directo de Instagram.
-- No usa cookies de Instagram.
-- No incluye claves de servicios externos.
-
-La idea es tener una base limpia, segura y versionada para luego conectar el proveedor/API que quieras usar.
-
----
-
-## Estructura del proyecto
-
-```text
-LuisInstaTelegram/
-├── public/
-│   └── index.php             # Webhook principal
-├── storage/
-│   └── .gitkeep              # Carpeta de logs/runtime
-├── config.example.txt        # Configuración de ejemplo, sin secretos
-├── config.txt                # Configuración real local, ignorada por Git
-├── composer.json             # Metadata PHP / script de lint
-├── VERSION                   # Versión actual
-├── CHANGELOG.md              # Historial de cambios
-└── README.md
-```
-
----
-
-## Requisitos
-
-Servidor:
-
-- Ubuntu Server 22.04, 24.04 o similar.
+- Servidor Linux propio, por ejemplo Ubuntu Server 22.04/24.04.
 - Apache 2.4 o Nginx.
-- PHP 8.0 o superior.
-- Extensión PHP cURL.
-- HTTPS válido si vas a usar webhook público de Telegram.
-- Un puerto expuesto soportado por Telegram: `443`, `80`, `88` o `8443`.
+- PHP 8.0+.
+- Extensiones PHP:
+  - `curl`
+  - `json`
+- Dominio o subdominio público apuntando al servidor.
+- HTTPS válido.
+- Bot creado con BotFather.
+- Cuenta/API key de RapidAPI con acceso a `instagram-looter2`.
 
-Paquetes mínimos en Ubuntu con Apache:
+En Ubuntu con Apache:
 
 ```bash
 sudo apt update
-sudo apt install -y apache2 php php-cli php-curl libapache2-mod-php curl git
+sudo apt install -y apache2 php php-cli php-curl php-json libapache2-mod-php curl git
 ```
 
-Verificar PHP:
+Validar:
 
 ```bash
 php -v
-php -m | grep curl
+php -m | grep -E 'curl|json'
 ```
 
 ---
 
-## 1. Crear el bot en Telegram
+## Crear el bot en Telegram
 
 1. Abrí Telegram.
 2. Buscá `@BotFather`.
@@ -93,92 +69,66 @@ php -m | grep curl
 /newbot
 ```
 
-4. Elegí un nombre visible, por ejemplo:
+4. Elegí nombre visible, por ejemplo:
 
 ```text
 LuisInstaTelegram
 ```
 
-5. Elegí un username terminado en `bot`, por ejemplo:
+5. Elegí username terminado en `bot`, por ejemplo:
 
 ```text
 LuisInstaTelegram_bot
 ```
 
-6. BotFather te va a entregar un token con este formato aproximado:
+6. BotFather devuelve un token similar a:
 
 ```text
-123456789:ABCDEF_REEMPLAZAR_POR_TOKEN_REAL
+123456789:ABCDEF_REEMPLAZAR
 ```
 
-Guardalo para el archivo `config.txt`.
-
-Importante: ese token es una contraseña. No lo subas a GitHub, no lo pegues en issues, no lo compartas en capturas.
+Ese token va en `config.txt` como `token:`.
 
 ---
 
-## 2. Obtener el chat ID
+## Obtener el chat ID
 
-### Opción A: usando el comando `/id` del propio bot
+### Método recomendado con el propio bot
 
-Cuando el webhook ya esté configurado:
-
-1. Abrí un chat privado con tu bot.
-2. Enviá:
+Una vez configurado el webhook, mandale al bot:
 
 ```text
 /id
 ```
 
-El bot responderá algo como:
+El bot responde:
 
 ```text
 Chat ID: 123456789
 ```
 
-Ese número puede ir en `TELEGRAM_ALLOWED_CHAT_IDS`.
+### Método alternativo con getUpdates
 
-### Opción B: usando `getUpdates`
-
-Esta opción sirve antes de configurar webhook.
-
-1. Hablale al bot desde Telegram y mandale `/start`.
-2. Ejecutá:
+Antes de configurar webhook:
 
 ```bash
-curl "https://api.telegram.org/botTU_TOKEN/getUpdates"
+BOT_TOKEN="TU_TOKEN"
+curl "https://api.telegram.org/bot${BOT_TOKEN}/getUpdates"
 ```
 
-3. Buscá este bloque:
+Buscá:
 
 ```json
 "chat": {
-  "id": 123456789,
-  "type": "private"
+  "id": 123456789
 }
 ```
 
-El valor de `id` es el chat ID.
-
-### Chat ID de grupos
-
-Para grupos, agregá el bot al grupo y mandá un mensaje. Luego usá `getUpdates`. Los grupos suelen tener IDs negativos, por ejemplo:
-
-```text
--1001234567890
-```
-
-Si querés que el bot lea mensajes normales en grupos, revisá la privacidad del bot en BotFather:
-
-```text
-/setprivacy
-```
-
-Para comandos como `/id`, normalmente no hace falta desactivar la privacidad.
+En grupos el ID suele ser negativo, por ejemplo `-1001234567890`.
 
 ---
 
-## 3. Instalar el proyecto en el servidor
+## Instalar en el servidor
 
 Ejemplo usando `/opt/LuisInstaTelegram`:
 
@@ -189,76 +139,70 @@ sudo chown -R $USER:www-data /opt/LuisInstaTelegram
 cd /opt/LuisInstaTelegram
 ```
 
-Crear configuración real:
+Crear configuración:
 
 ```bash
 cp config.example.txt config.txt
 nano config.txt
 ```
 
-Ejemplo de `config.txt`:
+Formato esperado:
 
 ```ini
-TELEGRAM_BOT_TOKEN=TU_TOKEN_REAL_DE_BOTFATHER
-TELEGRAM_ALLOWED_CHAT_IDS=TU_CHAT_ID
-TELEGRAM_WEBHOOK_SECRET=UN_SECRETO_LARGO_RANDOM
-THIRD_PARTY_API_URL=
-THIRD_PARTY_API_KEY=
-APP_DEBUG=false
-APP_LOG_FILE=../storage/bot.log
+token: TU_TOKEN_REAL_DE_BOTFATHER
+chat_id: TU_CHAT_ID
+third_party_api_key: TU_RAPIDAPI_KEY
+webhook_secret: UN_SECRETO_LARGO_RANDOM
 ```
 
-Permisos recomendados:
+Permisos:
 
 ```bash
-sudo chown -R www-data:www-data /opt/LuisInstaTelegram/storage
-sudo chmod 750 /opt/LuisInstaTelegram/storage
 sudo chown root:www-data /opt/LuisInstaTelegram/config.txt
 sudo chmod 640 /opt/LuisInstaTelegram/config.txt
+
+sudo chown -R www-data:www-data /opt/LuisInstaTelegram/storage
+sudo chmod 750 /opt/LuisInstaTelegram/storage
 ```
 
-Validar sintaxis PHP:
+Validar sintaxis:
 
 ```bash
-php -l /opt/LuisInstaTelegram/public/index.php
+php -l /opt/LuisInstaTelegram/public/peuigbot.php
 ```
 
 ---
 
-## 4. Publicar con Apache en puerto 8443
+## Publicar con Apache en puerto 8443
 
-Telegram acepta webhooks en puertos concretos. Si no querés usar el 443 normal, una opción cómoda es exponer `8443`.
+Telegram soporta webhooks en puertos `443`, `80`, `88` y `8443`.
 
-### Habilitar módulos Apache
+Habilitar módulos:
 
 ```bash
 sudo a2enmod ssl rewrite headers
 sudo systemctl restart apache2
 ```
 
-### Hacer que Apache escuche en 8443
-
-Editá:
+Editar puertos:
 
 ```bash
 sudo nano /etc/apache2/ports.conf
 ```
 
-Agregá:
+Agregar:
 
 ```apache
 Listen 8443
 ```
 
-### Crear VirtualHost
-
-Crear archivo:
+Crear sitio:
 
 ```bash
 sudo nano /etc/apache2/sites-available/luisinstatelegram.conf
 ```
 
-Contenido ejemplo:
+Ejemplo:
 
 ```apache
 <VirtualHost *:8443>
@@ -281,7 +225,7 @@ Contenido ejemplo:
 </VirtualHost>
 ```
 
-Activar sitio:
+Activar:
 
 ```bash
 sudo a2ensite luisinstatelegram.conf
@@ -289,50 +233,37 @@ sudo apache2ctl configtest
 sudo systemctl reload apache2
 ```
 
-Abrir firewall:
+Firewall:
 
 ```bash
 sudo ufw allow 8443/tcp
-sudo ufw status
 ```
 
 ---
 
-## 5. Certificado HTTPS
-
-Telegram necesita una URL pública HTTPS válida para el webhook, salvo que uses un Bot API Server local propio.
-
-Con Certbot y Apache:
+## HTTPS con Let's Encrypt
 
 ```bash
 sudo apt install -y certbot python3-certbot-apache
 sudo certbot --apache -d bot.tudominio.com
 ```
 
-Si Certbot te configura el puerto 443 pero vos querés usar 8443, podés usar el certificado emitido en el VirtualHost de 8443 como se mostró arriba.
-
-Probar desde afuera:
+Probar:
 
 ```bash
-curl -i https://bot.tudominio.com:8443/index.php
+curl -i https://bot.tudominio.com:8443/peuigbot.php
 ```
 
-Debe devolver algo como:
-
-```json
-{"ok":true,"version":"1.0.0"}
-```
+Sin update de Telegram debería responder `OK` o mensaje simple, o al menos no dar error 500.
 
 ---
 
-## 6. Configurar webhook de Telegram
-
-Usá el mismo secreto que pusiste en `TELEGRAM_WEBHOOK_SECRET`.
+## Configurar webhook de Telegram
 
 ```bash
 BOT_TOKEN="TU_TOKEN_REAL"
-WEBHOOK_SECRET="UN_SECRETO_LARGO_RANDOM"
-WEBHOOK_URL="https://bot.tudominio.com:8443/index.php"
+WEBHOOK_SECRET="EL_MISMO_webhook_secret_DE_config_txt"
+WEBHOOK_URL="https://bot.tudominio.com:8443/peuigbot.php"
 
 curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook" \
   -d "url=${WEBHOOK_URL}" \
@@ -340,72 +271,77 @@ curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook" \
   -d "drop_pending_updates=true"
 ```
 
-Verificar estado:
+Verificar:
 
 ```bash
 curl "https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo"
 ```
 
-Campos importantes:
+Revisar:
 
-- `url`: debe mostrar tu URL.
-- `pending_update_count`: si sube mucho, Telegram no está pudiendo entregar updates.
-- `last_error_message`: muestra el último error de entrega.
+- `url`
+- `pending_update_count`
+- `last_error_message`
 
 ---
 
-## 7. Probar el bot
+## Probar
 
 En Telegram:
 
 ```text
 /start
-```
-
-Luego:
-
-```text
 /id
+/version
 ```
 
-Luego mandá un link público de Instagram:
+Luego enviar:
 
 ```text
-https://www.instagram.com/reel/SHORTCODE_DE_EJEMPLO/
+https://www.instagram.com/reel/SHORTCODE/
 ```
 
-El bot debería responder con el shortcode detectado.
+El bot debería:
+
+1. responder que está procesando;
+2. consultar RapidAPI;
+3. enviar cada foto/video;
+4. finalizar con mensaje de éxito.
 
 ---
 
-## 8. Logs y diagnóstico
-
-Logs propios del bot:
+## Logs
 
 ```bash
-sudo tail -f /opt/LuisInstaTelegram/storage/bot.log
-```
-
-Logs Apache:
-
-```bash
+sudo tail -f /opt/LuisInstaTelegram/storage/bot_log.txt
 sudo tail -f /var/log/apache2/luisinstatelegram_error.log
-sudo tail -f /var/log/apache2/error.log
 ```
 
-Ver estado Apache:
+---
+
+## Diagnóstico rápido
+
+### Error 500
 
 ```bash
-sudo systemctl status apache2
+php -l /opt/LuisInstaTelegram/public/peuigbot.php
+sudo tail -n 100 /var/log/apache2/error.log
 ```
 
-Validar configuración Apache:
+### No responde Telegram
 
 ```bash
-sudo apache2ctl configtest
+curl "https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo"
 ```
 
-Validar si Apache escucha en 8443:
+### Permisos
+
+```bash
+ls -l /opt/LuisInstaTelegram/config.txt
+ls -ld /opt/LuisInstaTelegram/storage
+```
+
+### Apache escuchando
 
 ```bash
 sudo ss -tulpen | grep 8443
@@ -413,104 +349,26 @@ sudo ss -tulpen | grep 8443
 
 ---
 
-## 9. Errores comunes
+## Seguridad
 
-### `500 Internal Server Error`
-
-Revisar:
-
-```bash
-sudo tail -n 100 /var/log/apache2/error.log
-php -l /opt/LuisInstaTelegram/public/index.php
-```
-
-Causas típicas:
-
-- Falta `php-curl`.
-- Permisos incorrectos sobre `storage/`.
-- Error de sintaxis PHP.
-- `config.txt` inaccesible para Apache.
-
-### El bot no responde
-
-Revisar:
-
-```bash
-curl "https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo"
-```
-
-Si `last_error_message` dice timeout o connection refused:
-
-- El puerto no está abierto.
-- Apache no está escuchando en ese puerto.
-- DNS apunta a otra IP.
-- El certificado HTTPS no es válido.
-
-### `401 unauthorized`
-
-El `secret_token` configurado en Telegram no coincide con `TELEGRAM_WEBHOOK_SECRET`.
-
-Solución:
-
-```bash
-curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook" \
-  -d "url=${WEBHOOK_URL}" \
-  -d "secret_token=${WEBHOOK_SECRET}"
-```
-
-### `Chat ID no autorizado`
-
-Si configuraste `TELEGRAM_ALLOWED_CHAT_IDS`, agregá el chat ID correcto al archivo `config.txt`:
-
-```ini
-TELEGRAM_ALLOWED_CHAT_IDS=123456789,-1001234567890
-```
-
----
-
-## 10. Seguridad operacional
-
-No subir nunca a GitHub:
+No commitear nunca:
 
 - `config.txt`
-- Tokens de BotFather
-- Cookies de Instagram
-- API keys
-- Logs reales
-- Capturas con tokens o chat IDs privados
+- tokens de Telegram
+- API keys de RapidAPI
+- cookies
+- logs reales
+- capturas con tokens/chat IDs
 
-Si un token se filtró:
-
-1. Ir a `@BotFather`.
-2. Usar `/revoke`.
-3. Generar token nuevo.
-4. Actualizar `config.txt`.
-5. Reconfigurar webhook.
-
-Recomendaciones:
-
-- Usar `TELEGRAM_WEBHOOK_SECRET` siempre.
-- Restringir `TELEGRAM_ALLOWED_CHAT_IDS` cuando termines las pruebas.
-- Mantener `config.txt` con permisos `640` y grupo `www-data`.
-- No dejar `APP_DEBUG=true` en producción.
+Si un token se filtró, regenerarlo con BotFather usando `/revoke`.
 
 ---
 
-## 11. Actualizar desde GitHub
+## Actualizar desde GitHub
 
 ```bash
 cd /opt/LuisInstaTelegram
-sudo git pull
-php -l public/index.php
+git pull
+php -l public/peuigbot.php
 sudo systemctl reload apache2
 ```
-
----
-
-## 12. Roadmap posible
-
-- Integrar una API externa concreta para resolver medios de Instagram.
-- Enviar video/foto directo a Telegram.
-- Cola de procesamiento para enlaces pesados.
-- Soporte para grupos y canales con reglas específicas.
-- Instalador automático para Apache/Nginx.
