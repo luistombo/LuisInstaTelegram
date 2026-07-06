@@ -1,0 +1,20 @@
+# Local configuration / secrets
+config.txt
+.env
+*.local
+
+# Runtime files
+storage/*.log
+storage/*.json
+bot_log.txt
+*.log
+
+# Composer/vendor output
+vendor/
+composer.lock
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
